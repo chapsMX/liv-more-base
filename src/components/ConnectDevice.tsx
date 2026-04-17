@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { sdk } from "@farcaster/miniapp-sdk";
 import { protoMono } from "@/styles/fonts";
 import type { AppUser } from "@/types/user";
 
@@ -10,27 +9,20 @@ type ConnectDeviceProps = {
   onProviderSet?: () => void;
 };
 
-async function openAuthUrl(path: string) {
+function openAuthUrl(path: string) {
   const url = `${window.location.origin}${path}`;
-  try {
-    await sdk.actions.openUrl(url);
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export default function ConnectDevice({ user }: ConnectDeviceProps) {
+  // Usar fid si tiene, si no usar id interno
+  const userParam = user.fid ? `fid=${user.fid}` : `userId=${user.id}`;
+
   return (
     <main className="flex-1 flex flex-col items-center justify-center p-2 gap-2 overflow-auto">
       <div className="flex flex-row items-center justify-center w-full max-w-sm gap-4">
         <div className="flex flex-1 items-center justify-center">
-          <Image
-            src="/livMore_w.png"
-            alt="Liv More"
-            width={80}
-            height={80}
-            priority
-          />
+          <Image src="/livMore_w.png" alt="Liv More" width={80} height={80} priority />
         </div>
         <div className="flex flex-1 items-center justify-center">
           <h1 className={`text-3xl font-bold ${protoMono.className}`}>LivMore</h1>
@@ -55,30 +47,27 @@ export default function ConnectDevice({ user }: ConnectDeviceProps) {
         </h2>
         <button
           type="button"
-          onClick={() => openAuthUrl(`/api/auth/garmin-v1?fid=${user.fid}`)}
-          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#ff8800] text-[#ff8800] hover:bg-[#ff8800] hover:text-white rounded-full min-w-[80px] transition-colors"
+          onClick={() => openAuthUrl(`/api/auth/garmin-v1?${userParam}`)}
+          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#ff8800] text-[#ff8800] hover:bg-[#ff8800] hover:text-white rounded-full transition-colors"
         >
           Connect Garmin
         </button>
         <button
           type="button"
-          onClick={() => openAuthUrl(`/api/auth/polar?fid=${user.fid}`)}
-          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#d4003c] text-[#d4003c] hover:bg-[#d4003c] hover:text-white rounded-full min-w-[80px] transition-colors"
+          onClick={() => openAuthUrl(`/api/auth/polar?${userParam}`)}
+          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#d4003c] text-[#d4003c] hover:bg-[#d4003c] hover:text-white rounded-full transition-colors"
         >
           Connect Polar
         </button>
         <button
           type="button"
-          onClick={() => openAuthUrl(`/api/auth/oura/connect?fid=${user.fid}`)}
-          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#00d4aa] text-[#00d4aa] hover:bg-[#00d4aa] hover:text-white rounded-full min-w-[80px] transition-colors"
+          onClick={() => openAuthUrl(`/api/auth/oura/connect?${userParam}`)}
+          className="flex items-center justify-center gap-2 px-4 py-2 w-full bg-transparent border-2 border-[#00d4aa] text-[#00d4aa] hover:bg-[#00d4aa] hover:text-white rounded-full transition-colors"
         >
           Connect Oura
         </button>
         <p className={`text-gray-600 text-xs text-center mt-2 ${protoMono.className}`}>
-          Both connections open in your browser. Once connected, close the browser window, return to the miniapp and refresh it.
-        </p>
-        <p className={`text-gray-600 text-xs text-center mt-1 ${protoMono.className}`}>
-          Account FID: {user.fid}
+          Connections open in your browser. Return here when done.
         </p>
       </section>
     </main>
