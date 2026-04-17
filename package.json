@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.34.3",
+    "@base-org/account": "^2.5.4",
     "@ethereum-attestation-service/eas-sdk": "^2.9.0",
     "@farcaster/miniapp-sdk": "^0.2.3",
     "@neondatabase/serverless": "^0.10.4",

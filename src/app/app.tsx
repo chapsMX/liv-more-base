@@ -2,10 +2,10 @@
 
 import dynamic from "next/dynamic";
 
-const LivMore = dynamic(() => import("../components/LivMore"), {
+const LivMoreBase = dynamic(() => import("@/components/LivMoreBase"), {
   ssr: false,
 });
 
 export default function App() {
-  return <LivMore />;
+  return <LivMoreBase />;
 }
