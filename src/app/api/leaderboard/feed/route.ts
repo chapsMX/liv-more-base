@@ -14,20 +14,24 @@ export async function GET(req: NextRequest) {
     );
 
     const rows = await sql`
-      SELECT
-        ds.id,
-        ds.user_id,
-        u.fid,
-        u.username,
-        u.og,
-        ds.date,
-        ds.steps,
-        ds.attestation_hash IS NOT NULL AS attested
-      FROM "2026_daily_steps" ds
-      JOIN "2026_users" u ON u.id = ds.user_id
-      ORDER BY ds.date DESC, ds.steps DESC
-      LIMIT ${limit}
-    `;
+    SELECT
+      ds.id,
+      ds.user_id,
+      u.fid,
+      u.username,
+      u.display_name,
+      u.basename,
+      u.eth_address,
+      u.auth_type,
+      u.og,
+      ds.date,
+      ds.steps,
+      ds.attestation_hash IS NOT NULL AS attested
+    FROM "2026_daily_steps" ds
+    JOIN "2026_users" u ON u.id = ds.user_id
+    ORDER BY ds.date DESC, ds.steps DESC
+    LIMIT ${limit}
+  `;
 
     return NextResponse.json(rows);
   } catch (e) {

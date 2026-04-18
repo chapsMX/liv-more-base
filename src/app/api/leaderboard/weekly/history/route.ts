@@ -31,19 +31,23 @@ export async function GET() {
 
     for (const c of compRows as Array<{ id: number; week_number: number; year: number; week_start: string; week_end: string }>) {
       const winners = await sql`
-        SELECT
-          u.id,
-          u.fid,
-          u.username,
-          u.og,
-          w.total_valid_steps,
-          w.rank
-        FROM "2026_weekly_winners" w
-        JOIN "2026_users" u ON u.id = w.user_id
-        WHERE w.competition_id = ${c.id}
-          AND w.category = 'general'
-        ORDER BY w.rank ASC
-      `
+      SELECT
+        u.id,
+        u.fid,
+        u.username,
+        u.display_name,
+        u.basename,
+        u.eth_address,
+        u.auth_type,
+        u.og,
+        w.total_valid_steps,
+        w.rank
+      FROM "2026_weekly_winners" w
+      JOIN "2026_users" u ON u.id = w.user_id
+      WHERE w.competition_id = ${c.id}
+        AND w.category = 'general'
+      ORDER BY w.rank ASC
+    `
 
       history.push({
         week_number: c.week_number,
@@ -54,6 +58,10 @@ export async function GET() {
           id: r.id,
           fid: r.fid,
           username: r.username ?? '',
+          display_name: r.display_name ?? null,
+          basename: r.basename ?? null,
+          eth_address: r.eth_address ?? null,
+          auth_type: r.auth_type ?? 'farcaster',
           og: r.og,
           total_valid_steps: r.total_valid_steps,
           rank: Number(r.rank),
