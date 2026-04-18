@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}?error=invalid_state`, 302);
   }
 
-  const { fid } = payload;
+  const { fid, userId: cookieUserId } = payload;
 
   // --- 1. Exchange authorization code for access token ---
   const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString(
@@ -118,18 +118,24 @@ export async function GET(request: Request) {
 
   // --- 2. Resolve our internal user ---
   let userId: number;
-  try {
+  if (fid) {
     const userRows = await sql`
       SELECT id FROM "2026_users" WHERE fid = ${fid} LIMIT 1
     `;
     if (userRows.length === 0) {
-      console.error("[polar callback] User not found for fid:", fid);
       return NextResponse.redirect(`${appUrl}?error=user_not_found`, 302);
     }
     userId = userRows[0].id as number;
-  } catch (e) {
-    console.error("[polar callback] DB user lookup failed:", e);
-    return NextResponse.redirect(`${appUrl}?error=db_error`, 302);
+  } else if (cookieUserId) {
+    const userRows = await sql`
+      SELECT id FROM "2026_users" WHERE id = ${cookieUserId} LIMIT 1
+    `;
+    if (userRows.length === 0) {
+      return NextResponse.redirect(`${appUrl}?error=user_not_found`, 302);
+    }
+    userId = userRows[0].id as number;
+  } else {
+    return NextResponse.redirect(`${appUrl}?error=invalid_state`, 302);
   }
 
   // --- 3. Register user in Polar AccessLink ---
@@ -201,7 +207,7 @@ export async function GET(request: Request) {
     await sql`
       UPDATE "2026_users"
       SET provider = 'polar', updated_at = now()
-      WHERE fid = ${fid}
+      WHERE id = ${userId}
     `;
   } catch (e) {
     console.error("[polar callback] DB update failed:", e);

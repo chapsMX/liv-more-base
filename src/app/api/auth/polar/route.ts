@@ -23,21 +23,30 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-
   const { searchParams } = new URL(request.url);
-  const fidParam = searchParams.get("fid");
-  const fid = fidParam ? parseInt(fidParam, 10) : NaN;
-
-  if (!Number.isInteger(fid) || fid < 1) {
+  const fidParam    = searchParams.get("fid");
+  const userIdParam = searchParams.get("userId");
+  
+  const fid    = fidParam    ? parseInt(fidParam, 10)    : NaN;
+  const userId = userIdParam ? parseInt(userIdParam, 10) : NaN;
+  
+  const hasFid    = Number.isInteger(fid)    && fid    > 0;
+  const hasUserId = Number.isInteger(userId) && userId > 0;
+  
+  if (!hasFid && !hasUserId) {
     return NextResponse.json(
-      { error: "fid is required and must be a positive integer" },
+      { error: "fid or userId is required and must be a positive integer" },
       { status: 400 }
     );
   }
 
   const state = crypto.randomBytes(16).toString("hex");
 
-  const payload = encodePolarCookie({ state, fid });
+  const payload = encodePolarCookie({
+    state,
+    fid:    hasFid    ? fid    : undefined,
+    userId: hasUserId ? userId : undefined,
+  });
   const cookieOptions = getPolarCookieOptions();
 
   const authorizeUrl = new URL(POLAR_AUTHORIZE_URL);

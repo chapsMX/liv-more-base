@@ -103,8 +103,8 @@ export async function POST(req: NextRequest) {
   const encodedData = schemaEncoder.encodeData([
     { name: "title", value: "Daily Steps", type: "string" },
     { name: "description", value: `${row.steps} steps on ${date}`, type: "string" },
-    { name: "fid", value: BigInt(row.fid), type: "uint64" },
-    { name: "username", value: (row.username as string) ?? "", type: "string" },
+    { name: "fid", value: BigInt(row.fid ?? 0), type: "uint64" },
+    { name: "username", value: (row.username as string) ?? (row.eth_address as string) ?? "", type: "string" },
     { name: "steps", value: row.steps as number, type: "uint32" },
     { name: "provider", value: provider, type: "string" },
     { name: "date", value: date, type: "string" },
