@@ -1,13 +1,10 @@
-/**
- * Cookie storage for Polar OAuth 2.0 flow.
- * Stores the user's fid and a random state value during the authorization redirect.
- */
 const COOKIE_NAME = "polar_oauth";
-const MAX_AGE = 600; // 10 minutes
+const MAX_AGE = 600;
 
 export type PolarOAuthCookiePayload = {
   state: string;
-  fid: number;
+  fid?: number;
+  userId?: number;
 };
 
 export function getPolarCookieOptions() {
@@ -24,14 +21,16 @@ export function encodePolarCookie(payload: PolarOAuthCookiePayload): string {
   return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }
 
-export function decodePolarCookie(
-  value: string
-): PolarOAuthCookiePayload | null {
+export function decodePolarCookie(value: string): PolarOAuthCookiePayload | null {
   try {
     const json = Buffer.from(value, "base64url").toString("utf-8");
     const data = JSON.parse(json) as PolarOAuthCookiePayload;
-    if (typeof data.state === "string" && Number.isInteger(data.fid)) {
-      return { state: data.state, fid: data.fid };
+    if (typeof data.state === "string") {
+      const hasFid = Number.isInteger(data.fid) && (data.fid ?? 0) > 0;
+      const hasUserId = Number.isInteger(data.userId) && (data.userId ?? 0) > 0;
+      if (hasFid || hasUserId) {
+        return { state: data.state, fid: data.fid, userId: data.userId };
+      }
     }
   } catch {
     // ignore
