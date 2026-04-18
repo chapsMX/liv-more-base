@@ -24,14 +24,20 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-
+  // valida si hay fid de farcaster o userId de base app
   const { searchParams } = new URL(request.url);
   const fidParam = searchParams.get("fid");
+  const userIdParam = searchParams.get("userId");
+  
   const fid = fidParam ? parseInt(fidParam, 10) : NaN;
-
-  if (!Number.isInteger(fid) || fid < 1) {
+  const userId = userIdParam ? parseInt(userIdParam, 10) : NaN;
+  
+  const hasFid = Number.isInteger(fid) && fid > 0;
+  const hasUserId = Number.isInteger(userId) && userId > 0;
+  
+  if (!hasFid && !hasUserId) {
     return NextResponse.json(
-      { error: "fid is required and must be a positive integer" },
+      { error: "fid or userId is required and must be a positive integer" },
       { status: 400 }
     );
   }
@@ -53,7 +59,8 @@ export async function GET(request: Request) {
 
   const payload = encodeOAuth1Cookie({
     oauth_token_secret: requestToken.oauth_token_secret,
-    fid,
+    fid: hasFid ? fid : undefined,
+    userId: hasUserId ? userId : undefined,
   });
   const cookieOptions = getOAuth1CookieOptions();
 

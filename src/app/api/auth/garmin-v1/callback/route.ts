@@ -7,10 +7,6 @@ import {
   GARMIN_OAUTH1_COOKIE_NAME,
 } from "@/lib/garmin-oauth1-cookie";
 
-/**
- * Garmin OAuth 1.0a callback.
- * Step 2: User returns with oauth_token and oauth_verifier; exchange for access token and save to DB.
- */
 export async function GET(request: Request) {
   const consumerKey = process.env.GARMIN_CLIENT_ID;
   const consumerSecret = process.env.GARMIN_CLIENT_SECRET;
@@ -40,7 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}?error=invalid_state`, 302);
   }
 
-  const { oauth_token_secret: oauthTokenSecret, fid } = payload;
+  const { oauth_token_secret: oauthTokenSecret, fid, userId: cookieUserId } = payload;
 
   let accessTokenRes: { oauth_token: string; oauth_token_secret: string };
   try {
@@ -56,7 +52,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}?error=token_exchange_failed`, 302);
   }
 
-  // Fetch real Garmin user id from Wellness API (persists across tokens)
+  // Fetch real Garmin user id from Wellness API
   let garminUserId: string;
   try {
     garminUserId = await getWellnessUserId({
@@ -67,24 +63,38 @@ export async function GET(request: Request) {
     });
   } catch (e) {
     console.warn("[garmin-v1 callback] getWellnessUserId failed, using placeholder:", e);
-    // Fallback so connection still works; webhook can backfill later
-    const userRowsForPlaceholder = await sql`SELECT id FROM "2026_users" WHERE fid = ${fid} LIMIT 1`;
-    const uid = userRowsForPlaceholder[0]?.id as number | undefined;
-    garminUserId = uid != null ? `livmore-user-${uid}` : `livmore-${fid}`;
+    garminUserId = cookieUserId != null
+      ? `livmore-user-${cookieUserId}`
+      : `livmore-${fid}`;
   }
 
   try {
-    // Resolve user id from fid
-    const userRows = await sql`
-      SELECT id FROM "2026_users" WHERE fid = ${fid} LIMIT 1
-    `;
-    if (userRows.length === 0) {
-      console.error("[garmin-v1 callback] User not found for fid:", fid);
-      return NextResponse.redirect(`${appUrl}?error=user_not_found`, 302);
-    }
-    const userId = userRows[0].id as number;
+    // Resolver userId — desde fid o directo desde cookie
+    let userId: number;
 
-    // Upsert provider connection (one row per user; (re)connect Garmin)
+    if (fid) {
+      const userRows = await sql`
+        SELECT id FROM "2026_users" WHERE fid = ${fid} LIMIT 1
+      `;
+      if (userRows.length === 0) {
+        console.error("[garmin-v1 callback] User not found for fid:", fid);
+        return NextResponse.redirect(`${appUrl}?error=user_not_found`, 302);
+      }
+      userId = userRows[0].id as number;
+    } else if (cookieUserId) {
+      const userRows = await sql`
+        SELECT id FROM "2026_users" WHERE id = ${cookieUserId} LIMIT 1
+      `;
+      if (userRows.length === 0) {
+        console.error("[garmin-v1 callback] User not found for userId:", cookieUserId);
+        return NextResponse.redirect(`${appUrl}?error=user_not_found`, 302);
+      }
+      userId = userRows[0].id as number;
+    } else {
+      return NextResponse.redirect(`${appUrl}?error=invalid_state`, 302);
+    }
+
+    // Upsert provider connection
     const connRows = await sql`
       INSERT INTO "2026_provider_connections" (user_id, provider)
       VALUES (${userId}, 'garmin')
@@ -99,7 +109,6 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}?error=db_update_failed`, 302);
     }
 
-    // If we have real Garmin user id, update existing row by connection_id first (replace placeholder), else insert
     const isRealGarminId = !garminUserId.startsWith("livmore-user-") && !garminUserId.startsWith("livmore-");
     if (isRealGarminId) {
       const updated = await sql`
@@ -131,14 +140,14 @@ export async function GET(request: Request) {
       `;
     }
 
-    // Keep 2026_users.provider in sync so the app knows which provider is connected
+    // Actualizar provider en 2026_users
     await sql`
       UPDATE "2026_users"
       SET provider = 'garmin', updated_at = now()
-      WHERE fid = ${fid}
+      WHERE id = ${userId}
     `;
 
-    // Trigger backfill of historical steps after successful connection
+    // Backfill histórico
     const baseUrl = process.env.NEXT_PUBLIC_URL;
     if (baseUrl) {
       try {
