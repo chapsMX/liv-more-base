@@ -5,8 +5,7 @@ import { sql } from "@/lib/db";
 import { getValidOuraConnection } from "@/lib/oura";
 
 const OURA_TOKEN_URL = "https://api.ouraring.com/oauth/token";
-const OURA_PERSONAL_INFO_URL =
-  "https://api.ouraring.com/v2/usercollection/personal_info";
+const OURA_PERSONAL_INFO_URL = "https://api.ouraring.com/v2/usercollection/personal_info";
 
 export async function GET(req: NextRequest) {
   const appUrl =
@@ -14,64 +13,71 @@ export async function GET(req: NextRequest) {
     process.env.NEXT_PUBLIC_URL ||
     "https://app.livmore.life";
 
-  const code = req.nextUrl.searchParams.get("code");
+  const code  = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
 
   const cookieStore = await cookies();
-  const savedState = cookieStore.get("oura_oauth_state")?.value;
-  const fid = cookieStore.get("oura_oauth_fid")?.value;
+  const savedState  = cookieStore.get("oura_oauth_state")?.value;
+  const fidCookie    = cookieStore.get("oura_oauth_fid")?.value;
+  const userIdCookie = cookieStore.get("oura_oauth_userid")?.value;
 
   const res = NextResponse.redirect(`${appUrl}?oura=error`, 302);
-
-  // Limpiar cookies en la respuesta
   res.cookies.delete("oura_oauth_state");
   res.cookies.delete("oura_oauth_fid");
+  res.cookies.delete("oura_oauth_userid");
 
-  if (error || !code || !state || !fid) {
-    console.error("[oura/callback] missing params:", { error, code, state, fid });
+  if (error || !code || !state || (!fidCookie && !userIdCookie)) {
+    console.error("[oura/callback] missing params:", { error, code, state, fidCookie, userIdCookie });
     return res;
   }
 
-  // Validar state para prevenir CSRF
   if (state !== savedState) {
-    console.error("[oura/callback] state mismatch", { state, savedState });
+    console.error("[oura/callback] state mismatch");
     return res;
   }
 
-  // Buscar usuario interno por fid
-  const userRows = await sql`
-    SELECT id FROM "2026_users" WHERE fid = ${parseInt(fid, 10)}
-  `;
-  const user = userRows[0];
-  if (!user) {
-    console.error("[oura/callback] user not found for fid:", fid);
-    return res;
+  // Resolver userId
+  let userId: number;
+  if (fidCookie) {
+    const userRows = await sql`
+      SELECT id FROM "2026_users" WHERE fid = ${parseInt(fidCookie, 10)} LIMIT 1
+    `;
+    if (!userRows[0]) {
+      console.error("[oura/callback] user not found for fid:", fidCookie);
+      return res;
+    }
+    userId = userRows[0].id as number;
+  } else {
+    const userRows = await sql`
+      SELECT id FROM "2026_users" WHERE id = ${parseInt(userIdCookie!, 10)} LIMIT 1
+    `;
+    if (!userRows[0]) {
+      console.error("[oura/callback] user not found for userId:", userIdCookie);
+      return res;
+    }
+    userId = userRows[0].id as number;
   }
-
-  const userId = user.id as number;
 
   // Intercambiar code por tokens
   const redirectUri =
     process.env.OURA_REDIRECT_URI ||
     `${appUrl}/api/auth/oura/callback`;
+
   const tokenRes = await fetch(OURA_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "authorization_code",
+      grant_type:    "authorization_code",
       code,
-      redirect_uri: redirectUri,
-      client_id: process.env.OURA_CLIENT_ID!,
+      redirect_uri:  redirectUri,
+      client_id:     process.env.OURA_CLIENT_ID!,
       client_secret: process.env.OURA_CLIENT_SECRET!,
     }),
   });
 
   if (!tokenRes.ok) {
-    console.error(
-      "[oura/callback] token exchange failed:",
-      await tokenRes.text()
-    );
+    console.error("[oura/callback] token exchange failed:", await tokenRes.text());
     return res;
   }
 
@@ -84,10 +90,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (!userRes.ok) {
-    console.error(
-      "[oura/callback] failed to fetch oura user:",
-      await userRes.text()
-    );
+    console.error("[oura/callback] failed to fetch oura user:", await userRes.text());
     return res;
   }
 
@@ -99,7 +102,6 @@ export async function GET(req: NextRequest) {
     return res;
   }
 
-  // Guardar en BD (upsert provider_connections por UNIQUE user_id)
   try {
     const connRows = await sql`
       INSERT INTO "2026_provider_connections" (user_id, provider)
@@ -117,9 +119,9 @@ export async function GET(req: NextRequest) {
       VALUES
         (${connectionId}, ${ouraUserId}, ${access_token}, ${refresh_token}, ${tokenExpiresAt})
       ON CONFLICT (oura_user_id) DO UPDATE SET
-        connection_id = EXCLUDED.connection_id,
-        access_token = EXCLUDED.access_token,
-        refresh_token = EXCLUDED.refresh_token,
+        connection_id    = EXCLUDED.connection_id,
+        access_token     = EXCLUDED.access_token,
+        refresh_token    = EXCLUDED.refresh_token,
         token_expires_at = EXCLUDED.token_expires_at
     `;
 
@@ -129,9 +131,7 @@ export async function GET(req: NextRequest) {
       WHERE id = ${userId}
     `;
 
-    console.log(
-      `[oura/callback] user ${userId} (fid: ${fid}) connected as oura_user_id: ${ouraUserId}`
-    );
+    console.log(`[oura/callback] user ${userId} connected as oura_user_id: ${ouraUserId}`);
   } catch (err) {
     console.error("[oura/callback] DB error:", err);
     return res;
@@ -151,12 +151,8 @@ async function backfillOuraHistory(userId: number, ouraUserId: string) {
   const connection = await getValidOuraConnection(ouraUserId);
   if (!connection) return;
 
-  const endDate = new Date().toISOString().split("T")[0];
-  const startDate = new Date(
-    Date.now() - 10 * 86400000
-  )
-    .toISOString()
-    .split("T")[0];
+  const endDate   = new Date().toISOString().split("T")[0];
+  const startDate = new Date(Date.now() - 10 * 86400000).toISOString().split("T")[0];
 
   const res = await fetch(
     `https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${startDate}&end_date=${endDate}`,
@@ -164,23 +160,18 @@ async function backfillOuraHistory(userId: number, ouraUserId: string) {
   );
 
   if (!res.ok) {
-    console.error(
-      "[oura/backfill] failed to fetch activity:",
-      await res.text()
-    );
+    console.error("[oura/backfill] failed to fetch activity:", await res.text());
     return;
   }
 
   const json = await res.json();
   const data = json.data ?? json;
   const activities = Array.isArray(data) ? data : [];
-
   let saved = 0;
 
   for (const activity of activities) {
-    const day = activity.day ?? activity.date ?? activity.timestamp?.split("T")[0];
+    const day   = activity.day ?? activity.date ?? activity.timestamp?.split("T")[0];
     const steps = activity.steps;
-
     if (!day || steps == null) continue;
 
     await sql`
